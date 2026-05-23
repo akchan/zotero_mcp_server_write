@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "zotero-mcp-server-write"
-version = "0.1.0"
+version = "0.1.1"
 description = "MCP server exposing Zotero local write operations (DOI import, PDF import with recognition, attach PDF, add note)"
 readme = "README.md"
 license = { text = "MIT" }

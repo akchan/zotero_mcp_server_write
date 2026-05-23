@@ -28,18 +28,18 @@ values.
 
 ## Install / run
 
-The server is published to GitHub and installable directly with `uv`:
+The server is published to PyPI as `zotero-mcp-server-write`:
 
 ```bash
-# Run from a clone:
-uv run zotero-mcp-server-write
-
-# Or, once published to PyPI:
+# Run on-demand with uv (recommended; matches the Claude Desktop config below)
 uvx zotero-mcp-server-write
+
+# Or install with pip into a virtual environment / globally
+pip install zotero-mcp-server-write
+zotero-mcp-server-write
 ```
 
-(The PyPI package name is `zotero-mcp-server-write`. The console-script entry
-point has the same name.)
+The console-script entry point has the same name as the package.
 
 ## Tools
 
