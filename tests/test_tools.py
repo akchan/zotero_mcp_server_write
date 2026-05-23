@@ -16,6 +16,8 @@ BASE = "http://127.0.0.1:23119"
 @pytest.fixture
 def client():
     c = ZoteroWriteClient(base_url=BASE, timeout=5)
+    # Bypass the plugin-version probe for tests that don't exercise it.
+    c._version_checked = True
     srv.set_client(c)
     yield c
     srv.set_client(None)
@@ -62,6 +64,37 @@ async def test_add_note_html_passthrough(client, monkeypatch):
 async def test_add_note_invalid_format(client):
     with pytest.raises(ValueError):
         await srv.add_note("PARENT01", "x", format="rst")  # type: ignore[arg-type]
+
+
+async def test_update_note_markdown_converts(client, monkeypatch):
+    captured = {}
+
+    async def fake_update(note_key, note_html):
+        captured["note_key"] = note_key
+        captured["note_html"] = note_html
+        return {"success": True, "note_key": "NOTE0001"}
+
+    monkeypatch.setattr(client, "update_note", fake_update)
+    await srv.update_note("NOTE0001", "**bold**", format="markdown")
+    assert captured["note_key"] == "NOTE0001"
+    assert "<strong>bold</strong>" in captured["note_html"]
+
+
+async def test_update_note_html_passthrough(client, monkeypatch):
+    captured = {}
+
+    async def fake_update(note_key, note_html):
+        captured["note_html"] = note_html
+        return {"success": True}
+
+    monkeypatch.setattr(client, "update_note", fake_update)
+    await srv.update_note("NOTE0001", "<p>raw</p>", format="html")
+    assert captured["note_html"] == "<p>raw</p>"
+
+
+async def test_update_note_invalid_format(client):
+    with pytest.raises(ValueError):
+        await srv.update_note("NOTE0001", "x", format="rst")  # type: ignore[arg-type]
 
 
 async def test_add_pdf_requires_absolute_path(client):

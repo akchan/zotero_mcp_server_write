@@ -8,6 +8,24 @@ from typing import Any
 import httpx
 
 
+MIN_PLUGIN_VERSION: tuple[int, int, int] = (0, 2, 1)
+
+
+def _parse_plugin_version(raw: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for token in raw.split("."):
+        digits = ""
+        for ch in token:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts)
+
+
 class ZoteroWriteError(RuntimeError):
     """Raised when the Zotero write plugin returns an error response."""
 
@@ -49,6 +67,7 @@ class ZoteroWriteClient:
         )
         self._client = client
         self._owns_client = client is None
+        self._version_checked = False
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -74,7 +93,34 @@ class ZoteroWriteClient:
             return None
         return data if isinstance(data, dict) else None
 
+    async def ensure_compatible_plugin(self) -> None:
+        """Probe /version once and require plugin >= MIN_PLUGIN_VERSION.
+
+        Cached after the first successful check for the lifetime of the client.
+        """
+        if self._version_checked:
+            return
+        info = await self.version()
+        raw = info.get("version")
+        if not isinstance(raw, str) or not raw:
+            raise ZoteroWriteError(
+                "Plugin /version response missing a version string",
+                response_json=info,
+            )
+        parsed = _parse_plugin_version(raw)
+        if parsed < MIN_PLUGIN_VERSION:
+            required = ".".join(str(p) for p in MIN_PLUGIN_VERSION)
+            raise ZoteroWriteError(
+                f"zotero_write_api_plugin {raw} is too old; "
+                f"this client requires >= {required}. "
+                f"Update the XPI from "
+                f"https://github.com/akchan/zotero_write_api_plugin/releases",
+                response_json=info,
+            )
+        self._version_checked = True
+
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        await self.ensure_compatible_plugin()
         client = await self._get_client()
         response = await client.post(self._url(path), json=payload)
         data = self._parse_json(response)
@@ -142,6 +188,14 @@ class ZoteroWriteClient:
         payload = {
             "operation": "attach_note",
             "item_key": item_key,
+            "note": note_html,
+        }
+        return await self._post("/write", payload)
+
+    async def update_note(self, note_key: str, note_html: str) -> dict[str, Any]:
+        payload = {
+            "operation": "update_note",
+            "note_key": note_key,
             "note": note_html,
         }
         return await self._post("/write", payload)

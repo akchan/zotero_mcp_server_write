@@ -5,6 +5,7 @@ Tools:
     - add_pdf
     - attach_pdf_to_item
     - add_note
+    - update_note
 """
 
 from __future__ import annotations
@@ -144,6 +145,34 @@ async def add_note(
     return await get_client().attach_note(item_key, note_html)
 
 
+async def update_note(
+    note_key: str,
+    content: str,
+    format: Literal["markdown", "html"] = "markdown",
+) -> dict[str, Any]:
+    """Replace the body of an existing Zotero note.
+
+    Args:
+        note_key: 8-character Zotero item key (e.g. "ABCD1234") of the note
+            item to update. Note keys can be discovered via the read-only
+            `54yyyu/zotero-mcp` server.
+        content: New note body. When `format="markdown"` (default), the
+            content is rendered to HTML before being stored. When
+            `format="html"`, the content is sent through unchanged.
+        format: Either "markdown" or "html".
+
+    Returns:
+        Plugin response dict including the note's `note_key`.
+    """
+    if format == "markdown":
+        note_html = markdown_to_html(content)
+    elif format == "html":
+        note_html = content
+    else:
+        raise ValueError(f"format must be 'markdown' or 'html', got {format!r}")
+    return await get_client().update_note(note_key, note_html)
+
+
 def build_server() -> FastMCP:
     """Create a FastMCP instance with all tools registered."""
     server = FastMCP("zotero-mcp-server-write")
@@ -151,6 +180,7 @@ def build_server() -> FastMCP:
     server.tool()(add_pdf)
     server.tool()(attach_pdf_to_item)
     server.tool()(add_note)
+    server.tool()(update_note)
     return server
 
 
