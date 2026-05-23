@@ -1,0 +1,147 @@
+import json
+
+import httpx
+import pytest
+import respx
+
+from zotero_mcp_server_write.client import ZoteroWriteClient, ZoteroWriteError
+
+
+BASE = "http://127.0.0.1:23119"
+
+
+@pytest.fixture
+async def client():
+    c = ZoteroWriteClient(base_url=BASE, timeout=5)
+    yield c
+    await c.aclose()
+
+
+@respx.mock
+async def test_version_ok(client):
+    respx.get(f"{BASE}/version").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "version": "0.1.0",
+                "operations": ["import_by_identifier"],
+            },
+        )
+    )
+    data = await client.version()
+    assert data["version"] == "0.1.0"
+    assert "import_by_identifier" in data["operations"]
+
+
+@respx.mock
+async def test_import_by_identifier_payload(client):
+    route = respx.post(f"{BASE}/write").mock(
+        return_value=httpx.Response(
+            200, json={"success": True, "item_key": "AAAA1111"}
+        )
+    )
+    data = await client.import_by_identifier("10.1/x", collection_key="COL12345")
+    assert data["item_key"] == "AAAA1111"
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "operation": "import_by_identifier",
+        "identifier": "10.1/x",
+        "collection_key": "COL12345",
+    }
+
+
+@respx.mock
+async def test_import_by_identifier_omits_collection(client):
+    route = respx.post(f"{BASE}/write").mock(
+        return_value=httpx.Response(200, json={"success": True})
+    )
+    await client.import_by_identifier("10.1/x")
+    body = json.loads(route.calls.last.request.content)
+    assert "collection_key" not in body
+    assert body["operation"] == "import_by_identifier"
+
+
+@respx.mock
+async def test_attach_note_payload(client):
+    route = respx.post(f"{BASE}/write").mock(
+        return_value=httpx.Response(
+            200, json={"success": True, "item_key": "NOTE0001"}
+        )
+    )
+    await client.attach_note("PARENT01", "<p>hi</p>")
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "operation": "attach_note",
+        "item_key": "PARENT01",
+        "note": "<p>hi</p>",
+    }
+
+
+@respx.mock
+async def test_import_pdf_payload(client):
+    route = respx.post(f"{BASE}/write").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "status": "recognized",
+                "parent_item_key": "P1",
+                "attachment_key": "A1",
+            },
+        )
+    )
+    data = await client.import_pdf("a.pdf", "Zm9v", collection_key="C1")
+    assert data["status"] == "recognized"
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "operation": "import_pdf",
+        "file_name": "a.pdf",
+        "file_bytes_base64": "Zm9v",
+        "collection_key": "C1",
+    }
+
+
+@respx.mock
+async def test_attach_file_payload(client):
+    route = respx.post(f"{BASE}/attach").mock(
+        return_value=httpx.Response(
+            200, json={"success": True, "attachment_key": "ATT00001"}
+        )
+    )
+    data = await client.attach_file("PARENT01", "a.pdf", "Zm9v", "Title")
+    assert data["attachment_key"] == "ATT00001"
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "item_key": "PARENT01",
+        "title": "Title",
+        "file_name": "a.pdf",
+        "file_bytes_base64": "Zm9v",
+    }
+
+
+@respx.mock
+async def test_non_2xx_raises(client):
+    respx.post(f"{BASE}/write").mock(
+        return_value=httpx.Response(500, json={"success": False, "error": "boom"})
+    )
+    with pytest.raises(ZoteroWriteError) as exc:
+        await client.import_by_identifier("10.1/x")
+    assert exc.value.status_code == 500
+    assert "boom" in str(exc.value)
+
+
+@respx.mock
+async def test_success_false_raises(client):
+    respx.post(f"{BASE}/write").mock(
+        return_value=httpx.Response(
+            200, json={"success": False, "error": "bad identifier"}
+        )
+    )
+    with pytest.raises(ZoteroWriteError) as exc:
+        await client.import_by_identifier("nope")
+    assert "bad identifier" in str(exc.value)
+    assert exc.value.response_json == {
+        "success": False,
+        "error": "bad identifier",
+    }
