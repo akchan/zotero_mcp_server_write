@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 
-MIN_PLUGIN_VERSION: tuple[int, int, int] = (0, 2, 1)
+MIN_PLUGIN_VERSION: tuple[int, int, int] = (0, 3, 0)
 
 
 def _parse_plugin_version(raw: str) -> tuple[int, ...]:
@@ -213,6 +213,16 @@ class ZoteroWriteClient:
         }
         if collection_key is not None:
             payload["collection_key"] = collection_key
+        return await self._post("/write", payload)
+
+    async def add_tags(
+        self, item_key: str, tags: list[str]
+    ) -> dict[str, Any]:
+        payload = {
+            "operation": "add_tags",
+            "item_key": item_key,
+            "tags": tags,
+        }
         return await self._post("/write", payload)
 
     async def attach_file(

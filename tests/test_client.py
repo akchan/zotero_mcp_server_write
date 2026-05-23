@@ -144,6 +144,30 @@ async def test_attach_file_payload(client):
 
 
 @respx.mock
+async def test_add_tags_payload(client):
+    route = respx.post(f"{BASE}/write").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "added": ["foo"],
+                "skipped": ["bar"],
+                "added_count": 1,
+                "skipped_count": 1,
+            },
+        )
+    )
+    data = await client.add_tags("PARENT01", ["foo", "bar"])
+    assert data["added_count"] == 1
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "operation": "add_tags",
+        "item_key": "PARENT01",
+        "tags": ["foo", "bar"],
+    }
+
+
+@respx.mock
 async def test_non_2xx_raises(client):
     respx.post(f"{BASE}/write").mock(
         return_value=httpx.Response(500, json={"success": False, "error": "boom"})
@@ -160,8 +184,8 @@ def test_parse_plugin_version():
     assert _parse_plugin_version("0.2.0-dev") == (0, 2, 0)
 
 
-def test_min_plugin_version_is_0_2_1():
-    assert MIN_PLUGIN_VERSION == (0, 2, 1)
+def test_min_plugin_version_is_0_3_0():
+    assert MIN_PLUGIN_VERSION == (0, 3, 0)
 
 
 @respx.mock
@@ -170,7 +194,7 @@ async def test_post_probes_version_once():
     try:
         version_route = respx.get(f"{BASE}/version").mock(
             return_value=httpx.Response(
-                200, json={"success": True, "version": "0.2.1"}
+                200, json={"success": True, "version": "0.3.0"}
             )
         )
         respx.post(f"{BASE}/write").mock(
@@ -195,7 +219,7 @@ async def test_post_rejects_outdated_plugin():
         with pytest.raises(ZoteroWriteError) as exc:
             await c.import_by_identifier("10.1/x")
         assert "0.1.2" in str(exc.value)
-        assert "0.2.1" in str(exc.value)
+        assert "0.3.0" in str(exc.value)
     finally:
         await c.aclose()
 

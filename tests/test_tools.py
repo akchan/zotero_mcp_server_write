@@ -97,6 +97,24 @@ async def test_update_note_invalid_format(client):
         await srv.update_note("NOTE0001", "x", format="rst")  # type: ignore[arg-type]
 
 
+async def test_add_tags_calls_client(client, monkeypatch):
+    captured = {}
+
+    async def fake_add_tags(item_key, tags):
+        captured["args"] = (item_key, tags)
+        return {"success": True, "added": tags, "skipped": []}
+
+    monkeypatch.setattr(client, "add_tags", fake_add_tags)
+    result = await srv.add_tags("PARENT01", ["foo", "bar"])
+    assert result["added"] == ["foo", "bar"]
+    assert captured["args"] == ("PARENT01", ["foo", "bar"])
+
+
+async def test_add_tags_rejects_empty(client):
+    with pytest.raises(ValueError):
+        await srv.add_tags("PARENT01", [])
+
+
 async def test_add_pdf_requires_absolute_path(client):
     with pytest.raises(ValueError):
         await srv.add_pdf("relative.pdf")

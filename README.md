@@ -49,6 +49,8 @@ The console-script entry point has the same name as the package.
 | `add_pdf`             | Import a local PDF, then run Zotero's metadata recognizer to find a parent item.                     |
 | `attach_pdf_to_item`  | Attach a local file (typically a PDF) to an existing Zotero item by `item_key`.                      |
 | `add_note`            | Add a child note to an existing item. Accepts markdown (rendered to HTML) or raw HTML.               |
+| `update_note`         | Replace the body of an existing note item (markdown or raw HTML).                                    |
+| `add_tags`            | Add one or more tags to an existing item. Already-present tags are skipped, not errored.             |
 
 ## Claude Desktop config example
 
@@ -84,8 +86,9 @@ Register both the read server and this write server side-by-side:
 
 - **Group libraries.** Only the user's local library is targeted; group library
   writes are not supported by the underlying plugin.
-- **Tag and collection management.** This server does not create, rename,
-  delete, or reassign tags or collections. Use
+- **Collection management.** This server does not create, rename, delete,
+  or reassign collections. Tag *addition* is supported via `add_tags`, but
+  renaming/removing tags is not. Use
   [`54yyyu/zotero-mcp`](https://github.com/54yyyu/zotero-mcp) for read access
   to those structures and edit them in the Zotero UI when needed.
 

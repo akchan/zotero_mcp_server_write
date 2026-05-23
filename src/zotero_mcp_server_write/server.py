@@ -6,6 +6,7 @@ Tools:
     - attach_pdf_to_item
     - add_note
     - update_note
+    - add_tags
 """
 
 from __future__ import annotations
@@ -173,6 +174,27 @@ async def update_note(
     return await get_client().update_note(note_key, note_html)
 
 
+async def add_tags(item_key: str, tags: list[str]) -> dict[str, Any]:
+    """Add one or more tags to an existing Zotero item.
+
+    Tags that the item already carries are silently skipped (the plugin
+    reports them under `skipped` rather than treating it as an error).
+
+    Args:
+        item_key: 8-character Zotero item key (e.g. "ABCD1234") of the item
+            to tag. Item keys can be discovered via the read-only
+            `54yyyu/zotero-mcp` server.
+        tags: Non-empty list of tag names to add.
+
+    Returns:
+        Plugin response dict including `added`, `skipped`, `added_count`,
+        and `skipped_count`.
+    """
+    if not tags:
+        raise ValueError("tags must contain at least one entry")
+    return await get_client().add_tags(item_key, tags)
+
+
 def build_server() -> FastMCP:
     """Create a FastMCP instance with all tools registered."""
     server = FastMCP("zotero-mcp-server-write")
@@ -181,6 +203,7 @@ def build_server() -> FastMCP:
     server.tool()(attach_pdf_to_item)
     server.tool()(add_note)
     server.tool()(update_note)
+    server.tool()(add_tags)
     return server
 
 
