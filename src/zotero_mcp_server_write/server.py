@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from .client import ZoteroWriteClient
 from .notes import markdown_to_html
@@ -195,9 +195,9 @@ async def add_tags(item_key: str, tags: list[str]) -> dict[str, Any]:
     return await get_client().add_tags(item_key, tags)
 
 
-def build_server() -> FastMCP:
-    """Create a FastMCP instance with all tools registered."""
-    server = FastMCP("zotero-mcp-server-write")
+def build_server() -> MCPServer:
+    """Create an MCPServer instance with all tools registered."""
+    server = MCPServer("zotero-mcp-server-write")
     server.tool()(add_by_doi)
     server.tool()(add_pdf)
     server.tool()(attach_pdf_to_item)
