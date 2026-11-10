@@ -33,6 +33,10 @@ _client: ZoteroWriteClient | None = None
 _MAX_ERROR_CHARS = 1000
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]+")
 
+# PDF readers accept the "%PDF-" header anywhere in the first 1024 bytes.
+_PDF_MAGIC = b"%PDF-"
+_PDF_HEADER_WINDOW = 1024
+
 
 class ToolInputError(ValueError):
     """Raised for invalid tool input; reported to the client verbatim."""
@@ -52,7 +56,13 @@ def set_client(client: ZoteroWriteClient | None) -> None:
     _client = client
 
 
-def _read_file_b64(file_path: str) -> tuple[str, str]:
+def _read_pdf_b64(file_path: str) -> tuple[str, str]:
+    """Read a local PDF and return (basename, base64 content).
+
+    The file must start with a PDF header so the tools cannot be used to copy
+    arbitrary local files (keys, configs) into the Zotero library, which may
+    sync to the cloud.
+    """
     try:
         path = Path(file_path).expanduser()
     except RuntimeError as exc:
@@ -66,8 +76,14 @@ def _read_file_b64(file_path: str) -> tuple[str, str]:
     try:
         if not path.is_file():
             raise FileNotFoundError(f"No such file: {file_path}")
-        data = path.read_bytes()
-    except FileNotFoundError:
+        with path.open("rb") as fh:
+            header = fh.read(_PDF_HEADER_WINDOW)
+            if _PDF_MAGIC not in header:
+                raise ToolInputError(
+                    f"Not a PDF file (no %PDF- header): {file_path!r}"
+                )
+            data = header + fh.read()
+    except (FileNotFoundError, ToolInputError):
         raise
     except OSError as exc:
         reason = exc.strerror or type(exc).__name__
@@ -110,7 +126,7 @@ async def add_pdf(
 
     Args:
         file_path: Absolute path to a readable PDF file on the same machine as
-            the Zotero process.
+            the Zotero process. Files without a PDF header are rejected.
         collection_key: Optional 8-character Zotero collection key (e.g.
             "ABCD1234") to file the resulting item(s) into. Collection keys
             can be discovered via the read-only `54yyyu/zotero-mcp` server.
@@ -119,28 +135,28 @@ async def add_pdf(
         Plugin response dict including `parent_item_key` and `attachment_key`
         when recognition succeeded.
     """
-    file_name, b64 = _read_file_b64(file_path)
+    file_name, b64 = _read_pdf_b64(file_path)
     return await get_client().import_pdf(file_name, b64, collection_key)
 
 
 async def attach_pdf_to_item(
     item_key: str, file_path: str, title: str | None = None
 ) -> dict[str, Any]:
-    """Attach a local file (typically a PDF) to an existing Zotero item.
+    """Attach a local PDF file to an existing Zotero item.
 
     Args:
         item_key: 8-character Zotero item key (e.g. "ABCD1234") of the parent
             item. Item keys can be discovered via the read-only
             `54yyyu/zotero-mcp` server.
-        file_path: Absolute path to a readable file on the same machine as the
-            Zotero process.
+        file_path: Absolute path to a readable PDF file on the same machine as
+            the Zotero process. Files without a PDF header are rejected.
         title: Optional display title for the attachment. Defaults to the
             file's basename.
 
     Returns:
         Plugin response dict including the new `attachment_key`.
     """
-    file_name, b64 = _read_file_b64(file_path)
+    file_name, b64 = _read_pdf_b64(file_path)
     display_title = title if title is not None else file_name
     return await get_client().attach_file(item_key, file_name, b64, display_title)
 

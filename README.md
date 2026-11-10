@@ -47,7 +47,7 @@ The console-script entry point has the same name as the package.
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | `add_by_doi`          | Import a new item from a DOI / ISBN / arXiv ID / PMID (type auto-detected).                          |
 | `add_pdf`             | Import a local PDF, then run Zotero's metadata recognizer to find a parent item.                     |
-| `attach_pdf_to_item`  | Attach a local file (typically a PDF) to an existing Zotero item by `item_key`.                      |
+| `attach_pdf_to_item`  | Attach a local PDF to an existing Zotero item by `item_key`.                                         |
 | `add_note`            | Add a child note to an existing item. Accepts markdown (rendered to HTML) or raw HTML.               |
 | `update_note`         | Replace the body of an existing note item (markdown or raw HTML).                                    |
 | `add_tags`            | Add one or more tags to an existing item. Already-present tags are skipped, not errored.             |

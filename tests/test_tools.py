@@ -153,7 +153,7 @@ async def test_add_pdf_base64_roundtrip(client, tmp_path):
 
 @respx.mock
 async def test_attach_pdf_to_item_default_title(client, tmp_path):
-    sample = b"hello-bytes"
+    sample = b"%PDF-1.7 hello-bytes"
     pdf = tmp_path / "attach.pdf"
     pdf.write_bytes(sample)
 
@@ -173,7 +173,7 @@ async def test_attach_pdf_to_item_default_title(client, tmp_path):
 @respx.mock
 async def test_attach_pdf_to_item_custom_title(client, tmp_path):
     pdf = tmp_path / "x.pdf"
-    pdf.write_bytes(b"abc")
+    pdf.write_bytes(b"%PDF-1.4 abc")
     route = respx.post(f"{BASE}/attach").mock(
         return_value=httpx.Response(200, json={"success": True})
     )
@@ -251,10 +251,10 @@ async def test_server_reports_permission_error(client, monkeypatch, tmp_path):
     target = tmp_path / "locked.pdf"
     target.write_bytes(b"%PDF-1.4")
 
-    def deny(self):
+    def deny(self, *args, **kwargs):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr(Path, "read_bytes", deny)
+    monkeypatch.setattr(Path, "open", deny)
     server = srv.build_server()
     with pytest.raises(ToolError, match="Permission denied"):
         await server.call_tool("add_pdf", {"file_path": str(target)})
@@ -286,3 +286,47 @@ async def test_wrapper_does_not_convert_unexpected_errors(client, monkeypatch):
     wrapped = srv._report_errors(srv.add_by_doi)
     with pytest.raises(RuntimeError, match="internal detail"):
         await wrapped("10.1/x")
+
+
+async def test_add_pdf_rejects_non_pdf(client, tmp_path):
+    secret = tmp_path / "id_rsa"
+    secret.write_bytes(b"-----BEGIN OPENSSH PRIVATE KEY-----\n")
+    with pytest.raises(srv.ToolInputError, match="Not a PDF"):
+        await srv.add_pdf(str(secret))
+
+
+async def test_attach_pdf_rejects_non_pdf(client, tmp_path):
+    fake = tmp_path / "fake.pdf"
+    fake.write_bytes(b"not really a pdf")
+    with pytest.raises(srv.ToolInputError, match="Not a PDF"):
+        await srv.attach_pdf_to_item("PARENT01", str(fake))
+
+
+@respx.mock
+async def test_add_pdf_accepts_header_after_leading_bytes(client, tmp_path):
+    sample = b"\x00" * 100 + b"%PDF-1.5 body"
+    pdf = tmp_path / "lead.pdf"
+    pdf.write_bytes(sample)
+    route = respx.post(f"{BASE}/write").mock(
+        return_value=httpx.Response(200, json={"success": True})
+    )
+    await srv.add_pdf(str(pdf))
+    body = json.loads(route.calls.last.request.content)
+    assert base64.b64decode(body["file_bytes_base64"]) == sample
+
+
+async def test_add_pdf_rejects_header_beyond_window(client, tmp_path):
+    late = tmp_path / "late.pdf"
+    late.write_bytes(b"x" * 1024 + b"%PDF-1.4")
+    with pytest.raises(srv.ToolInputError, match="Not a PDF"):
+        await srv.add_pdf(str(late))
+
+
+async def test_server_reports_non_pdf(client, tmp_path):
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    secret = tmp_path / "config.toml"
+    secret.write_bytes(b"token = 'x'\n")
+    server = srv.build_server()
+    with pytest.raises(ToolError, match="Not a PDF"):
+        await server.call_tool("add_pdf", {"file_path": str(secret)})
